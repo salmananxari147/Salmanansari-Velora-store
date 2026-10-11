@@ -72,22 +72,52 @@ app.use('/api', routes);
 app.use(notFound);
 app.use(errorHandler);
 
+export default app;
+
 const PORT = process.env.PORT || 5000;
 
-// Connect services and start server
-const startServer = async () => {
-  try {
-    await connectDB();
-    configureCloudinary();
-    await seedIfEmpty();
+let initializationPromise;
 
-    app.listen(PORT, () => {
-      console.log(`VELORA API running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error('Server startup failed:', error.message);
-    process.exit(1);
+async function initializeApp() {
+  if (!initializationPromise) {
+    initializationPromise = (async () => {
+      await connectDB();
+      configureCloudinary();
+      await seedIfEmpty();
+    })();
   }
-};
+
+  return initializationPromise;
+}
+
+// Vercel serverless handler
+export async function handler(req, res) {
+  try {
+    await initializeApp();
+    app(req, res);
+  } catch (error) {
+    console.error('Server initialization failed:', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        message: 'Server initialization failed',
+      });
+    }
+  }
+}
+
+// Local development
+if (process.env.NODE_ENV !== 'production') {
+  initializeApp()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`VELORA API running on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error('Server startup failed:', error);
+      process.exit(1);
+    });
+}
 
 startServer();
