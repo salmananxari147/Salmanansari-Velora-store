@@ -30,7 +30,6 @@
 
 
 
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -43,38 +42,18 @@ import routes from './routes/index.js';
 
 const app = express();
 
-// Frontend URLs allowed to access the API
 const origins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ].filter(Boolean);
 
-// Middleware
 app.use(cors({
   origin: origins,
   credentials: true,
 }));
 
 app.use(express.json({ limit: '2mb' }));
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'API is running',
-  });
-});
-
-// API routes
-app.use('/api', routes);
-
-// Error handling
-app.use(notFound);
-app.use(errorHandler);
-
-export default app;
-
-const PORT = process.env.PORT || 5000;
 
 let initializationPromise;
 
@@ -84,22 +63,35 @@ async function initializeApp() {
       await connectDB();
       configureCloudinary();
       await seedIfEmpty();
-    })();
+      console.log('VELORA backend initialized successfully');
+    })().catch((error) => {
+      initializationPromise = null;
+      throw error;
+    });
   }
 
   return initializationPromise;
 }
 
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'API is running' });
+});
+
+app.use('/api', routes);
+
+app.use(notFound);
+app.use(errorHandler);
+
 // Vercel serverless handler
-export async function handler(req, res) {
+export default async function handler(req, res) {
   try {
     await initializeApp();
-    app(req, res);
+    return app(req, res);
   } catch (error) {
     console.error('Server initialization failed:', error);
 
     if (!res.headersSent) {
-      res.status(500).json({
+      return res.status(500).json({
         message: 'Server initialization failed',
       });
     }
@@ -107,6 +99,8 @@ export async function handler(req, res) {
 }
 
 // Local development
+const PORT = process.env.PORT || 5000;
+
 if (process.env.NODE_ENV !== 'production') {
   initializeApp()
     .then(() => {
